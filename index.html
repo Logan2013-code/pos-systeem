@@ -1353,17 +1353,27 @@ renderKassa();
 initPinLock();
 if(readers.length) setTimeout(renderReaderList,100);
 
-// Init cloud status
-if (settings.gistId && getGistToken()) { cloudConnected = true; }
+// Auto-pull from cloud on page load
+if (settings.gistId && getGistToken()) {
+  cloudConnected = true;
+  setTimeout(() => {
+    cloudPull().then(() => {
+      renderKassa();
+      const low=products.filter(p=>p.stock>0&&p.stock<=p.minStock);
+      const out=products.filter(p=>p.stock<=0);
+      if(out.length) toast(`⛔ ${out.length} product(en) uitverkocht`,'red');
+      else if(low.length) toast(`⚠️ ${low.length} product(en) hebben lage voorraad`,'orange');
+    }).catch(()=>{});
+  }, 800);
+} else {
+  setTimeout(()=>{
+    const low=products.filter(p=>p.stock>0&&p.stock<=p.minStock);
+    const out=products.filter(p=>p.stock<=0);
+    if(out.length) toast(`⛔ ${out.length} product(en) uitverkocht`,'red');
+    else if(low.length) toast(`⚠️ ${low.length} product(en) hebben lage voorraad`,'orange');
+  },1500);
+}
 setTimeout(updateCloudStatus, 500);
-
-// Low stock notifications on load
-setTimeout(()=>{
-  const low=products.filter(p=>p.stock>0&&p.stock<=p.minStock);
-  const out=products.filter(p=>p.stock<=0);
-  if(out.length) toast(`⛔ ${out.length} product(en) uitverkocht`,'red');
-  else if(low.length) toast(`⚠️ ${low.length} product(en) hebben lage voorraad`,'orange');
-},1500);
 </script>
 </body>
 </html>
