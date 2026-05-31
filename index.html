@@ -1158,9 +1158,9 @@ function saveProduct(){
   else{data.id=Date.now();products.push(data);toast('Product toegevoegd','green');}
   save();closeProductForm();renderProductsTable();
 }
-function deleteProduct(id){const p=products.find(x=>x.id===id);if(!p)return;deleteTargetId=id;document.getElementById('delete-modal-name').textContent=`"${p.icon||'📦'} ${p.name}" wordt permanent verwijderd.`;document.getElementById('delete-modal').classList.add('active');}
-function closeDeleteModal(){deleteTargetId=null;document.getElementById('delete-modal').classList.remove('active');}
-function confirmDelete(){if(!deleteTargetId)return;products=products.filter(p=>p.id!==deleteTargetId);save();closeDeleteModal();renderProductsTable();toast('Product verwijderd');}
+function deleteProduct(id){const p=products.find(x=>x.id===id);if(!p)return;products=products.filter(x=>x.id!==id);save();renderProductsTable();toast(`${p.icon||'📦'} ${p.name} verwijderd`);}
+function closeDeleteModal(){document.getElementById('delete-modal').classList.remove('active');}
+function confirmDelete(){}
 
 // ===================== VOORRAAD =====================
 function renderVoorraad(){
