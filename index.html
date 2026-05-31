@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.svg">
+<link rel="apple-touch-icon" href="icon-192.svg">
 <title>POS Systeem</title>
 <script>
 // Load ZXing async
@@ -1374,6 +1380,10 @@ if (settings.gistId && getGistToken()) {
   },1500);
 }
 setTimeout(updateCloudStatus, 500);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
 </script>
 </body>
 </html>
