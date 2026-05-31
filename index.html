@@ -614,6 +614,19 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- VERWIJDER BEVESTIGING MODAL -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal" style="max-width:380px;text-align:center">
+    <div style="font-size:2.5rem;margin-bottom:12px">🗑️</div>
+    <h2 style="margin-bottom:8px">Product verwijderen?</h2>
+    <p id="delete-modal-name" style="color:#6b7280;font-size:0.9rem;margin-bottom:24px"></p>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeDeleteModal()">Annuleren</button>
+      <button class="btn-confirm" style="background:#dc2626" onclick="confirmDelete()">Verwijderen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ===================== STATE =====================
 let products = JSON.parse(localStorage.getItem('pos_products') || '[]');
@@ -1276,10 +1289,22 @@ function saveProduct() {
   save(); closeProductForm(); renderProductsTable();
 }
 
+let deleteTargetId = null;
 function deleteProduct(id) {
-  if (!confirm('Weet je zeker dat je dit product wilt verwijderen?')) return;
-  products = products.filter(p => p.id !== id);
-  save(); renderProductsTable(); toast('Product verwijderd');
+  const p = products.find(x => x.id === id);
+  if (!p) return;
+  deleteTargetId = id;
+  document.getElementById('delete-modal-name').textContent = `"${p.icon || '📦'} ${p.name}" wordt permanent verwijderd.`;
+  document.getElementById('delete-modal').classList.add('active');
+}
+function closeDeleteModal() {
+  deleteTargetId = null;
+  document.getElementById('delete-modal').classList.remove('active');
+}
+function confirmDelete() {
+  if (!deleteTargetId) return;
+  products = products.filter(p => p.id !== deleteTargetId);
+  save(); closeDeleteModal(); renderProductsTable(); toast('Product verwijderd');
 }
 
 // ===================== VOORRAAD =====================
