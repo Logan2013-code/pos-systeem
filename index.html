@@ -5,8 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>POS Systeem</title>
 <script>
-// Load ZXing async — not blocking
+// Load ZXing async
 (function(){var s=document.createElement('script');s.src='https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';s.async=true;document.head.appendChild(s);})();
+// Load Firebase SDK
+(function(){
+  var m='https://www.gstatic.com/firebasejs/10.12.0/';
+  ['firebase-app-compat.js','firebase-database-compat.js'].forEach(function(f){
+    var s=document.createElement('script');s.src=m+f;s.async=false;document.head.appendChild(s);
+  });
+})();
 </script>
 <style>
 :root { --accent:#4f46e5; --accent-dark:#4338ca; --accent-light:#eef2ff; }
@@ -468,6 +475,27 @@ tr:hover td{background:#fafafa}
       </div>
       <div class="sumup-readers" id="sumup-readers"><p style="color:#9ca3af;font-size:.83rem">Sla API key op en klik "Terminals ophalen".</p></div>
     </div>
+
+    <!-- FIREBASE CLOUD SYNC -->
+    <div class="settings-card" style="grid-column:1/-1">
+      <h2>☁️ Cloud Sync (Firebase)</h2>
+      <p style="font-size:.82rem;color:#6b7280;margin-bottom:14px">Sla data op in de cloud zodat het op elk apparaat beschikbaar is. Maak gratis een project op <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent)">console.firebase.google.com</a>.</p>
+      <div class="form-row">
+        <div class="form-group"><label>API Key</label><input type="text" id="fb-apiKey" placeholder="AIza..."></div>
+        <div class="form-group"><label>Auth Domain</label><input type="text" id="fb-authDomain" placeholder="pos-systeem.firebaseapp.com"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Database URL</label><input type="text" id="fb-databaseURL" placeholder="https://pos-systeem-default-rtdb.europe-west1.firebasedatabase.app"></div>
+        <div class="form-group"><label>Project ID</label><input type="text" id="fb-projectId" placeholder="pos-systeem"></div>
+      </div>
+      <div id="cloud-status" style="padding:10px 14px;border-radius:8px;font-size:.83rem;margin-bottom:12px;background:#f3f4f6;color:#6b7280">☁️ Niet verbonden — voer Firebase config in</div>
+      <div style="display:flex;gap:10px">
+        <button class="save-btn" style="max-width:200px" onclick="saveFirebaseConfig()">💾 Opslaan & verbinden</button>
+        <button class="save-btn" style="max-width:200px;background:#16a34a" onclick="cloudPush()">⬆️ Alles uploaden</button>
+        <button class="save-btn" style="max-width:200px;background:#0ea5e9" onclick="cloudPull()">⬇️ Alles ophalen</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1105,6 +1133,13 @@ function renderInstellingen() {
   document.getElementById('color-picker').innerHTML=COLORS.map(c=>
     `<div class="color-swatch ${c===settings.color?'active':''}" style="background:${c}" onclick="pickColor('${c}',this)"></div>`).join('');
   if(readers.length) renderReaderList();
+  // Firebase config fields
+  const fb = settings.firebase || {};
+  document.getElementById('fb-apiKey').value = fb.apiKey || '';
+  document.getElementById('fb-authDomain').value = fb.authDomain || '';
+  document.getElementById('fb-databaseURL').value = fb.databaseURL || '';
+  document.getElementById('fb-projectId').value = fb.projectId || '';
+  updateCloudStatus();
 }
 function pickColor(c,el){settings.color=c;document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('active'));el.classList.add('active');applyTheme();}
 function saveShopSettings(){settings.shopName=document.getElementById('s-name').value||'POS Systeem';settings.address=document.getElementById('s-address').value;settings.phone=document.getElementById('s-phone').value;settings.email=document.getElementById('s-email').value;settings.kvk=document.getElementById('s-kvk').value;settings.btwnr=document.getElementById('s-btwnr').value;settings.receiptFooter=document.getElementById('s-receipt-footer').value;save();applyTheme();toast('Winkelgegevens opgeslagen','green');}
@@ -1238,11 +1273,121 @@ function exportCSV(){
 // ===================== TOAST =====================
 function toast(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className=`toast ${type} show`;setTimeout(()=>el.classList.remove('show'),2800);}
 
+// ===================== FIREBASE CLOUD SYNC =====================
+let fbApp = null, fbDb = null, fbConnected = false;
+
+function updateCloudStatus() {
+  const el = document.getElementById('cloud-status');
+  if (!el) return;
+  if (fbConnected) {
+    el.style.background = '#f0fdf4'; el.style.color = '#166534';
+    el.textContent = '☁️ Verbonden met Firebase — data wordt gesynchroniseerd';
+  } else if (settings.firebase?.apiKey) {
+    el.style.background = '#fffbeb'; el.style.color = '#92400e';
+    el.textContent = '⏳ Firebase geconfigureerd — verbinden...';
+  } else {
+    el.style.background = '#f3f4f6'; el.style.color = '#6b7280';
+    el.textContent = '☁️ Niet verbonden — voer Firebase config in';
+  }
+}
+
+function saveFirebaseConfig() {
+  settings.firebase = {
+    apiKey: document.getElementById('fb-apiKey').value.trim(),
+    authDomain: document.getElementById('fb-authDomain').value.trim(),
+    databaseURL: document.getElementById('fb-databaseURL').value.trim(),
+    projectId: document.getElementById('fb-projectId').value.trim()
+  };
+  save();
+  toast('Firebase config opgeslagen', 'green');
+  initFirebase();
+}
+
+function initFirebase() {
+  if (!settings.firebase?.apiKey || !settings.firebase?.databaseURL) { fbConnected = false; updateCloudStatus(); return; }
+  if (typeof firebase === 'undefined') { setTimeout(initFirebase, 500); return; }
+  try {
+    if (fbApp) { fbApp.delete().catch(()=>{}); }
+    fbApp = firebase.initializeApp(settings.firebase, 'pos-' + Date.now());
+    fbDb = fbApp.database();
+    fbDb.ref('.info/connected').on('value', snap => {
+      fbConnected = snap.val() === true;
+      updateCloudStatus();
+    });
+    listenForChanges();
+    toast('Firebase verbonden', 'green');
+  } catch (e) {
+    toast('Firebase fout: ' + e.message, 'red');
+    fbConnected = false;
+    updateCloudStatus();
+  }
+}
+
+function getCloudData() {
+  return { products, transactions, settings: {...settings}, readers, selectedReaderId, lastSync: new Date().toISOString() };
+}
+
+async function cloudPush() {
+  if (!fbDb) { toast('Verbind eerst met Firebase', 'red'); return; }
+  try {
+    await fbDb.ref('pos').set(getCloudData());
+    toast('⬆️ Alle data geüpload naar cloud', 'green');
+  } catch (e) { toast('Upload mislukt: ' + e.message, 'red'); }
+}
+
+async function cloudPull() {
+  if (!fbDb) { toast('Verbind eerst met Firebase', 'red'); return; }
+  try {
+    const snap = await fbDb.ref('pos').once('value');
+    const data = snap.val();
+    if (!data) { toast('Geen data in cloud gevonden', 'orange'); return; }
+    if (data.products) products = data.products;
+    if (data.transactions) transactions = data.transactions;
+    if (data.settings) {
+      const fbConfig = settings.firebase;
+      settings = { ...settings, ...data.settings };
+      settings.firebase = fbConfig;
+    }
+    if (data.readers) readers = data.readers;
+    if (data.selectedReaderId) selectedReaderId = data.selectedReaderId;
+    save();
+    applyTheme(); renderKassa();
+    toast(`⬇️ Data opgehaald (laatste sync: ${new Date(data.lastSync||0).toLocaleString('nl-NL')})`, 'green');
+  } catch (e) { toast('Ophalen mislukt: ' + e.message, 'red'); }
+}
+
+function cloudAutoSync() {
+  if (!fbDb || !fbConnected) return;
+  fbDb.ref('pos').update(getCloudData()).catch(() => {});
+}
+
+function listenForChanges() {
+  if (!fbDb) return;
+  fbDb.ref('pos').on('value', snap => {
+    const data = snap.val();
+    if (!data || !data.lastSync) return;
+    const local = localStorage.getItem('pos_last_sync') || '';
+    if (data.lastSync > local) {
+      localStorage.setItem('pos_last_sync', data.lastSync);
+    }
+  });
+}
+
+// Override save to also sync to cloud
+const _originalSave = save;
+save = function() {
+  _originalSave();
+  cloudAutoSync();
+};
+
 // ===================== INIT =====================
 applyTheme();
 renderKassa();
 initPinLock();
 if(readers.length) setTimeout(renderReaderList,100);
+
+// Connect Firebase if configured
+setTimeout(initFirebase, 800);
 
 // Low stock notifications on load
 setTimeout(()=>{
